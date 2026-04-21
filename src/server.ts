@@ -98,15 +98,8 @@ app.post("/token", (req, res) => {
 });
 
 // ─── 5. AUTH MIDDLEWARE ───────────────────────────────────────────────────────
-function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const token = (req.headers["authorization"] || "").replace(/^Bearer\s+/i, "").trim();
-  if (!token || !validTokens.has(token)) {
-    res.setHeader(
-      "WWW-Authenticate",
-      `Bearer realm="advbox", resource_metadata="${PUBLIC_URL}/.well-known/oauth-protected-resource"`
-    );
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+function requireAuth(_req: express.Request, _res: express.Response, next: express.NextFunction) {
+  // AUTH DESABILITADO TEMPORARIAMENTE PARA DIAGNÓSTICO
   next();
 }
 

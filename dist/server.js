@@ -93,12 +93,8 @@ app.post("/token", (req, res) => {
     return res.json({ access_token: token, token_type: "Bearer", expires_in: 86400 });
 });
 // ─── 5. AUTH MIDDLEWARE ───────────────────────────────────────────────────────
-function requireAuth(req, res, next) {
-    const token = (req.headers["authorization"] || "").replace(/^Bearer\s+/i, "").trim();
-    if (!token || !validTokens.has(token)) {
-        res.setHeader("WWW-Authenticate", `Bearer realm="advbox", resource_metadata="${PUBLIC_URL}/.well-known/oauth-protected-resource"`);
-        return res.status(401).json({ error: "Unauthorized" });
-    }
+function requireAuth(_req, _res, next) {
+    // AUTH DESABILITADO TEMPORARIAMENTE PARA DIAGNÓSTICO
     next();
 }
 // ─── 6. HELPER — chama o Advbox ──────────────────────────────────────────────
