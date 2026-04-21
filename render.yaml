@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: advbox-oauth-proxy
+    runtime: docker
+    plan: free
+    envVars:
+      - key: ADVBOX_URL
+        value: https://mcp.limaamorim.com.br
+      - key: ADVBOX_TOKEN
+        value: f869c4969f2e02f9245ee6a2d12db5788d92784da6badc9bba4d1d29a2bcc03c
+      - key: PORT
+        value: 4000
+      - key: PUBLIC_URL
+        generateValue: false
+        value: https://advbox-oauth-proxy.onrender.com
