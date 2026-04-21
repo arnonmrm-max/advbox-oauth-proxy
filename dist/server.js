@@ -26,13 +26,27 @@ app.use((_req, res, next) => {
     next();
 });
 // ─── 1. DISCOVERY ─────────────────────────────────────────────────────────────
+// Suporta tanto /.well-known/oauth-protected-resource quanto /.well-known/oauth-protected-resource/mcp
 app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+    res.json({ resource: PUBLIC_URL, authorization_servers: [PUBLIC_URL] });
+});
+app.get("/.well-known/oauth-protected-resource/*", (_req, res) => {
+    res.json({ resource: PUBLIC_URL, authorization_servers: [PUBLIC_URL] });
+});
+// Suporta tanto /.well-known/oauth-authorization-server quanto /.well-known/oauth-authorization-server/mcp
+app.get("/.well-known/oauth-authorization-server", (_req, res) => {
     res.json({
-        resource: PUBLIC_URL,
-        authorization_servers: [PUBLIC_URL],
+        issuer: PUBLIC_URL,
+        authorization_endpoint: `${PUBLIC_URL}/authorize`,
+        token_endpoint: `${PUBLIC_URL}/token`,
+        registration_endpoint: `${PUBLIC_URL}/register`,
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code"],
+        code_challenge_methods_supported: ["S256"],
+        token_endpoint_auth_methods_supported: ["none"],
     });
 });
-app.get("/.well-known/oauth-authorization-server", (_req, res) => {
+app.get("/.well-known/oauth-authorization-server/*", (_req, res) => {
     res.json({
         issuer: PUBLIC_URL,
         authorization_endpoint: `${PUBLIC_URL}/authorize`,
