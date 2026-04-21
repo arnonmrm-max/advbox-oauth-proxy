@@ -26,6 +26,12 @@ app.use((_req, res, next) => {
     next();
 });
 // ─── 1. DISCOVERY ─────────────────────────────────────────────────────────────
+app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+    res.json({
+        resource: PUBLIC_URL,
+        authorization_servers: [PUBLIC_URL],
+    });
+});
 app.get("/.well-known/oauth-authorization-server", (_req, res) => {
     res.json({
         issuer: PUBLIC_URL,
@@ -75,8 +81,10 @@ app.post("/token", (req, res) => {
 // ─── 5. AUTH MIDDLEWARE ───────────────────────────────────────────────────────
 function requireAuth(req, res, next) {
     const token = (req.headers["authorization"] || "").replace(/^Bearer\s+/i, "").trim();
-    if (!token || !validTokens.has(token))
+    if (!token || !validTokens.has(token)) {
+        res.setHeader("WWW-Authenticate", `Bearer realm="advbox", resource_metadata="${PUBLIC_URL}/.well-known/oauth-protected-resource"`);
         return res.status(401).json({ error: "Unauthorized" });
+    }
     next();
 }
 // ─── 6. HELPER — chama o Advbox ──────────────────────────────────────────────
