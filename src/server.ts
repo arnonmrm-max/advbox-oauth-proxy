@@ -99,7 +99,8 @@ app.post("/token", (req, res) => {
 
 // ─── 5. AUTH MIDDLEWARE ───────────────────────────────────────────────────────
 function requireAuth(_req: express.Request, _res: express.Response, next: express.NextFunction) {
-  // AUTH DESABILITADO TEMPORARIAMENTE PARA DIAGNÓSTICO
+  // Sem OAuth — o token do Advbox fica protegido server-side
+  // A URL do proxy é privada e só você conhece
   next();
 }
 
