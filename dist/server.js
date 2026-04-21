@@ -122,6 +122,15 @@ const TOOLS = [
     { name: "get_users_rewards", description: "Pontuação da equipe", inputSchema: { type: "object", properties: { date: { type: "string" } } } },
 ];
 // ─── 8. MCP STREAMABLE HTTP ENDPOINT ─────────────────────────────────────────
+// GET /mcp — Claude.ai usa para testar conectividade e SSE
+app.get("/mcp", requireAuth, (_req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.write(": ping\n\n");
+    const timer = setInterval(() => res.write(": ping\n\n"), 25000);
+    res.on("close", () => clearInterval(timer));
+});
 app.post("/mcp", requireAuth, async (req, res) => {
     const body = req.body;
     const id = body.id ?? null;
