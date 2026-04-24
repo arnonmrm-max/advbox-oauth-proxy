@@ -522,12 +522,25 @@ app.post("/webhook/chatguru", async (req, res) => {
     const body = req.body;
 
     // Extrai campos do payload ChatGuru
-    const phone: string   = (body.celular || body.phone || body.chat_number || "").replace(/\D/g, "");
-    const nome: string    = body.nome || body.name || "Cliente";
+    const phone: string    = (body.celular || body.phone || body.chat_number || "").replace(/\D/g, "");
+    const nome: string     = body.nome || body.name || "Cliente";
     const mensagem: string = body.texto_mensagem || body.message || body.text || "";
     const linkChat: string = body.link_chat || "";
     const responsavel: string = body.responsavel_nome || "";
     const chatCreated: string = body.chat_created || new Date().toISOString();
+
+    // Tags: aceita array ["CLIENTE ATIVO"] ou string "CLIENTE ATIVO, OUTRO"
+    const tagsRaw = body.tags || "";
+    const tags: string[] = Array.isArray(tagsRaw)
+      ? tagsRaw.map((t: string) => t.toUpperCase().trim())
+      : String(tagsRaw).toUpperCase().split(/[,;]/).map((t: string) => t.trim());
+
+    // ── FILTRO: só processa contatos com tag CLIENTE ATIVO ────────────────
+    const TAG_REQUERIDA = "CLIENTE ATIVO";
+    if (!tags.includes(TAG_REQUERIDA)) {
+      console.log(`[webhook] Ignorado — ${nome} (${phone}) não tem tag "${TAG_REQUERIDA}". Tags: ${tags.join(", ") || "nenhuma"}`);
+      return res.status(200).json({ status: "ignorado", motivo: `tag "${TAG_REQUERIDA}" ausente`, tags });
+    }
 
     if (!phone) {
       return res.status(400).json({ error: "Número de telefone não encontrado no payload" });
