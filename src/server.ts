@@ -149,41 +149,155 @@ async function sendWhatsApp(phone: string, message: string, send_date?: string) 
 
 // ─── 7. MCP TOOLS LIST ────────────────────────────────────────────────────────
 const TOOLS = [
-  { name: "list_customers",    description: "Lista clientes", inputSchema: { type: "object", properties: { name:{type:"string"}, phone:{type:"string"}, email:{type:"string"}, city:{type:"string"}, limit:{type:"number"}, offset:{type:"number"} } } },
-  { name: "get_customer",      description: "Detalhes de um cliente", inputSchema: { type: "object", required: ["customer_id"], properties: { customer_id:{type:"number"} } } },
-  { name: "search_customers",  description: "Busca clientes por nome", inputSchema: { type: "object", properties: { query:{type:"string"}, name:{type:"string"} } } },
-  { name: "create_customer",   description: "Cria cliente", inputSchema: { type: "object", required: ["users_id","customers_origins_id","name"], properties: { users_id:{type:"number"}, customers_origins_id:{type:"number"}, name:{type:"string"}, email:{type:"string"}, phone:{type:"string"} } } },
-  { name: "list_lawsuits",     description: "Lista processos", inputSchema: { type: "object", properties: { name:{type:"string"}, process_number:{type:"string"}, customer_id:{type:"number"}, responsible_id:{type:"number"}, limit:{type:"number"}, offset:{type:"number"} } } },
-  { name: "get_lawsuit",       description: "Detalhes de um processo", inputSchema: { type: "object", required: ["lawsuit_id"], properties: { lawsuit_id:{type:"number"} } } },
-  { name: "search_lawsuits",   description: "Busca processo por nome", inputSchema: { type: "object", properties: { query:{type:"string"}, name:{type:"string"} } } },
-  { name: "create_lawsuit",    description: "Cria processo", inputSchema: { type: "object", required: ["users_id","customers_id","stages_id","type_lawsuits_id"], properties: { users_id:{type:"number"}, customers_id:{type:"array",items:{type:"number"}}, stages_id:{type:"number"}, type_lawsuits_id:{type:"number"}, folder:{type:"string"}, process_number:{type:"string"} } } },
-  { name: "update_lawsuit",    description: "Atualiza fase (stages_id) ou dados gerais de um processo. Para registrar andamentos processuais use add_andamento.", inputSchema: { type: "object", required: ["lawsuit_id"], properties: { lawsuit_id:{type:"number"}, stages_id:{type:"number"}, notes:{type:"string", description:"Campo de notas gerais do processo"} } } },
-  { name: "add_andamento",     description: "Registra um andamento processual no processo. Use sempre que houver uma movimentação, decisão, despacho, petição, audiência ou qualquer atualização no processo. Acrescenta o andamento ao histórico existente com data automática.", inputSchema: { type: "object", required: ["lawsuit_id","descricao"], properties: { lawsuit_id:{type:"number", description:"ID interno do processo no Advbox"}, descricao:{type:"string", description:"Descrição do andamento processual (ex: Sentença proferida, Audiência realizada, Petição protocolada)"} } } },
-  { name: "list_transactions", description: "Lista transações financeiras", inputSchema: { type: "object", properties: { date_payment_start:{type:"string"}, date_payment_end:{type:"string"}, lawsuit_id:{type:"number"}, limit:{type:"number"} } } },
-  { name: "get_transaction",   description: "Detalhes de uma transação", inputSchema: { type: "object", required: ["transaction_id"], properties: { transaction_id:{type:"number"} } } },
-  { name: "list_tasks",        description: "Lista tarefas e compromissos", inputSchema: { type: "object", properties: { date_start:{type:"string"}, date_end:{type:"string"}, user_id:{type:"number"}, lawsuit_id:{type:"number"} } } },
-  { name: "create_task",       description: "Cria tarefa/compromisso", inputSchema: { type: "object", required: ["from","guests","tasks_id","lawsuits_id","start_date"], properties: { from:{type:"number"}, guests:{type:"array",items:{type:"number"}}, tasks_id:{type:"number"}, lawsuits_id:{type:"number"}, start_date:{type:"string"}, comments:{type:"string"} } } },
-  { name: "get_settings",      description: "Configurações do sistema", inputSchema: { type: "object", properties: {} } },
-  { name: "get_users",         description: "Lista usuários do escritório", inputSchema: { type: "object", properties: {} } },
-  { name: "get_origins",       description: "Lista origens de clientes", inputSchema: { type: "object", properties: {} } },
-  { name: "get_stages",        description: "Lista estágios de processos", inputSchema: { type: "object", properties: {} } },
-  { name: "get_type_lawsuits", description: "Lista tipos de processo", inputSchema: { type: "object", properties: {} } },
-  { name: "get_users_rewards", description: "Pontuação da equipe", inputSchema: { type: "object", properties: { date:{type:"string"} } } },
 
-  // ── WhatsApp ──────────────────────────────────────────────────────────────
-  {
-    name: "send_whatsapp",
-    description: "Envia mensagem WhatsApp para um número via ChatGuru. Use para enviar andamentos, avisos e atualizações de processos aos clientes.",
-    inputSchema: {
-      type: "object",
-      required: ["phone", "message"],
-      properties: {
-        phone:     { type: "string",  description: "Número do destinatário com DDI+DDD (ex: 5527999999999)" },
-        message:   { type: "string",  description: "Texto da mensagem a enviar" },
-        send_date: { type: "string",  description: "Agendamento opcional no formato YYYY-MM-DD HH:MM" },
-      },
-    },
-  },
+  // ── CLIENTES ──────────────────────────────────────────────────────────────
+  { name: "list_customers",
+    description: "Lista clientes do escritório. Filtre por nome, telefone, email ou cidade.",
+    inputSchema: { type: "object", properties: {
+      name:{type:"string"}, phone:{type:"string"}, email:{type:"string"},
+      city:{type:"string"}, limit:{type:"number"}, offset:{type:"number"},
+    }}},
+
+  { name: "get_customer",
+    description: "Retorna todos os dados de um cliente pelo ID, incluindo telefone, email, CPF/CNPJ e origem.",
+    inputSchema: { type: "object", required: ["customer_id"], properties: {
+      customer_id:{type:"number"},
+    }}},
+
+  { name: "search_customers",
+    description: "Busca clientes por nome ou termo livre.",
+    inputSchema: { type: "object", properties: {
+      query:{type:"string"}, name:{type:"string"},
+    }}},
+
+  { name: "create_customer",
+    description: "Cria um novo cliente no Advbox.",
+    inputSchema: { type: "object", required: ["users_id","customers_origins_id","name"], properties: {
+      users_id:{type:"number", description:"ID do advogado responsável"},
+      customers_origins_id:{type:"number", description:"ID da origem (use get_origins para listar)"},
+      name:{type:"string"}, email:{type:"string"}, phone:{type:"string"},
+      document:{type:"string", description:"CPF ou CNPJ (apenas números)"},
+      identification:{type:"string", description:"RG"},
+      birthdate:{type:"string", description:"Data de nascimento (YYYY-MM-DD)"},
+    }}},
+
+  // ── PROCESSOS ─────────────────────────────────────────────────────────────
+  { name: "list_lawsuits",
+    description: "Lista processos. Filtre por número, cliente, responsável, grupo ou fase.",
+    inputSchema: { type: "object", properties: {
+      name:{type:"string"}, process_number:{type:"string"},
+      customer_id:{type:"number"}, responsible_id:{type:"number"},
+      group_id:{type:"number", description:"ID do grupo/área (ex: JUDICIAL, RECURSAL)"},
+      limit:{type:"number"}, offset:{type:"number"},
+    }}},
+
+  { name: "get_lawsuit",
+    description: "Retorna todos os dados de um processo: fase, andamentos (notes), clientes, tipo, responsável e valores.",
+    inputSchema: { type: "object", required: ["lawsuit_id"], properties: {
+      lawsuit_id:{type:"number"},
+    }}},
+
+  { name: "search_lawsuits",
+    description: "Busca processos por nome, número ou termo livre.",
+    inputSchema: { type: "object", properties: {
+      query:{type:"string"}, name:{type:"string"},
+    }}},
+
+  { name: "create_lawsuit",
+    description: "Cria um novo processo no Advbox.",
+    inputSchema: { type: "object", required: ["users_id","customers_id","stages_id","type_lawsuits_id"], properties: {
+      users_id:{type:"number", description:"ID do advogado responsável"},
+      customers_id:{type:"array", items:{type:"number"}, description:"IDs dos clientes (partes do processo)"},
+      stages_id:{type:"number", description:"ID da fase inicial (use get_stages para listar)"},
+      type_lawsuits_id:{type:"number", description:"ID do tipo de processo (use get_type_lawsuits para listar)"},
+      folder:{type:"string", description:"Número da pasta (ex: PROC 000001)"},
+      process_number:{type:"string", description:"Número do processo judicial"},
+      protocol_number:{type:"string", description:"Número de protocolo"},
+      date:{type:"string", description:"Data do processo (YYYY-MM-DD)"},
+      notes:{type:"string", description:"Notas e andamentos iniciais"},
+    }}},
+
+  { name: "update_lawsuit",
+    description: "Atualiza fase, responsável, tipo ou dados gerais de um processo. Para acrescentar andamentos use add_andamento.",
+    inputSchema: { type: "object", required: ["lawsuit_id"], properties: {
+      lawsuit_id:{type:"number"},
+      stages_id:{type:"number", description:"Novo estágio/fase (use get_stages para listar IDs)"},
+      users_id:{type:"number", description:"Novo advogado responsável"},
+      type_lawsuits_id:{type:"number", description:"Novo tipo de processo"},
+      process_number:{type:"string"}, protocol_number:{type:"string"},
+      folder:{type:"string"}, date:{type:"string", description:"YYYY-MM-DD"},
+      notes:{type:"string", description:"Substitui todo o campo de notas — prefira add_andamento para preservar histórico"},
+    }}},
+
+  { name: "add_andamento",
+    description: "Registra um andamento processual no processo. Use sempre que houver movimentação, decisão, despacho, petição, audiência ou qualquer atualização. Acrescenta ao histórico com data automática sem apagar registros anteriores.",
+    inputSchema: { type: "object", required: ["lawsuit_id","descricao"], properties: {
+      lawsuit_id:{type:"number", description:"ID interno do processo no Advbox"},
+      descricao:{type:"string", description:"Descrição do andamento (ex: Sentença proferida, Audiência realizada, Petição protocolada)"},
+    }}},
+
+  // ── FINANCEIRO ────────────────────────────────────────────────────────────
+  { name: "list_transactions",
+    description: "Lista transações financeiras. Filtre por data de pagamento, data de vencimento ou processo.",
+    inputSchema: { type: "object", properties: {
+      date_payment_start:{type:"string", description:"YYYY-MM-DD"},
+      date_payment_end:{type:"string", description:"YYYY-MM-DD"},
+      date_due_start:{type:"string", description:"Data de vencimento início (YYYY-MM-DD)"},
+      date_due_end:{type:"string", description:"Data de vencimento fim (YYYY-MM-DD)"},
+      lawsuit_id:{type:"number"}, limit:{type:"number"}, offset:{type:"number"},
+    }}},
+
+  { name: "get_transaction",
+    description: "Retorna detalhes de uma transação financeira pelo ID.",
+    inputSchema: { type: "object", required: ["transaction_id"], properties: {
+      transaction_id:{type:"number"},
+    }}},
+
+  // ── TAREFAS ───────────────────────────────────────────────────────────────
+  { name: "list_tasks",
+    description: "Lista tarefas e compromissos. Filtre por período, usuário, processo ou tipo de tarefa.",
+    inputSchema: { type: "object", properties: {
+      date_start:{type:"string", description:"YYYY-MM-DD"},
+      date_end:{type:"string", description:"YYYY-MM-DD"},
+      user_id:{type:"number"}, lawsuit_id:{type:"number"},
+      task_id:{type:"number", description:"ID do tipo de tarefa"},
+      limit:{type:"number"}, offset:{type:"number"},
+    }}},
+
+  { name: "create_task",
+    description: "Cria uma tarefa ou compromisso vinculado a um processo.",
+    inputSchema: { type: "object", required: ["from","guests","tasks_id","lawsuits_id","start_date"], properties: {
+      from:{type:"number", description:"ID do usuário que criou a tarefa"},
+      guests:{type:"array", items:{type:"number"}, description:"IDs dos usuários responsáveis pela tarefa"},
+      tasks_id:{type:"number", description:"ID do tipo de tarefa (use get_settings para listar)"},
+      lawsuits_id:{type:"number", description:"ID do processo vinculado"},
+      start_date:{type:"string", description:"Data de início (YYYY-MM-DD)"},
+      start_time:{type:"string", description:"Hora de início (HH:MM)"},
+      end_date:{type:"string", description:"Data de término (YYYY-MM-DD)"},
+      end_time:{type:"string", description:"Hora de término (HH:MM)"},
+      date_deadline:{type:"string", description:"Prazo fatal (YYYY-MM-DD)"},
+      comments:{type:"string", description:"Observações da tarefa"},
+      local:{type:"string", description:"Local do compromisso"},
+      urgent:{type:"boolean", description:"Marcar como urgente"},
+      important:{type:"boolean", description:"Marcar como importante"},
+    }}},
+
+  // ── CONFIGURAÇÕES / LISTAS ────────────────────────────────────────────────
+  { name: "get_settings",      description: "Retorna configurações do sistema: contas bancárias, categorias financeiras, tipos de tarefa, centros de custo.", inputSchema: { type: "object", properties: {} } },
+  { name: "get_users",         description: "Lista todos os usuários e advogados do escritório com seus IDs.", inputSchema: { type: "object", properties: {} } },
+  { name: "get_origins",       description: "Lista origens de captação de clientes (Google, Instagram, Indicação etc.) com IDs.", inputSchema: { type: "object", properties: {} } },
+  { name: "get_stages",        description: "Lista todas as fases/estágios de processos com IDs, organizados por pipeline (Judicial, Recursal, Marketing etc.).", inputSchema: { type: "object", properties: {} } },
+  { name: "get_type_lawsuits", description: "Lista todos os tipos de processo com IDs, organizados por área (Imobiliário, Bancário, Família etc.).", inputSchema: { type: "object", properties: {} } },
+  { name: "get_users_rewards", description: "Retorna pontuação e ranking de produtividade da equipe. Filtre por data.", inputSchema: { type: "object", properties: { date:{type:"string", description:"Mês de referência (YYYY-MM)"} } } },
+
+  // ── WHATSAPP (ChatGuru) ───────────────────────────────────────────────────
+  { name: "send_whatsapp",
+    description: "Envia mensagem WhatsApp para um cliente via ChatGuru. Use para enviar andamentos, avisos de audiência, confirmações e atualizações de processos.",
+    inputSchema: { type: "object", required: ["phone","message"], properties: {
+      phone:{type:"string", description:"Número com DDI+DDD (ex: 5527999999999 para (27) 99999-9999)"},
+      message:{type:"string", description:"Texto da mensagem"},
+      send_date:{type:"string", description:"Agendamento opcional (YYYY-MM-DD HH:MM)"},
+    }}},
 ];
 
 // ─── 8. MCP STREAMABLE HTTP ENDPOINT ─────────────────────────────────────────
