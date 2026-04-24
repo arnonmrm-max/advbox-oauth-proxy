@@ -1,8 +1,10 @@
 services:
   - type: web
     name: advbox-oauth-proxy
-    runtime: docker
+    runtime: node
     plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: ADVBOX_URL
         value: https://mcp.limaamorim.com.br
