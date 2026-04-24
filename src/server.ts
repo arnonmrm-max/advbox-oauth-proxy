@@ -515,6 +515,91 @@ app.post("/mcp", requireAuth, async (req, res) => {
   }
 });
 
+// ─── 9. WEBHOOK CHATGURU → ADVBOX ────────────────────────────────────────────
+// Recebe eventos do ChatGuru e registra andamento no processo mais antigo do cliente
+app.post("/webhook/chatguru", async (req, res) => {
+  try {
+    const body = req.body;
+
+    // Extrai campos do payload ChatGuru
+    const phone: string   = (body.celular || body.phone || body.chat_number || "").replace(/\D/g, "");
+    const nome: string    = body.nome || body.name || "Cliente";
+    const mensagem: string = body.texto_mensagem || body.message || body.text || "";
+    const linkChat: string = body.link_chat || "";
+    const responsavel: string = body.responsavel_nome || "";
+    const chatCreated: string = body.chat_created || new Date().toISOString();
+
+    if (!phone) {
+      return res.status(400).json({ error: "Número de telefone não encontrado no payload" });
+    }
+
+    // 1. Busca cliente no Advbox pelo telefone (tenta com e sem DDI 55)
+    let customer: any = null;
+    const phoneVariants = [phone, phone.replace(/^55/, ""), `55${phone}`];
+
+    for (const p of phoneVariants) {
+      const result: any = await callAdvboxRest("GET", `customers?phone=${p}&limit=5`);
+      if (result?.data?.length > 0) {
+        customer = result.data[0];
+        break;
+      }
+    }
+
+    if (!customer) {
+      console.log(`[webhook] Cliente não encontrado para telefone ${phone}`);
+      return res.status(200).json({ status: "cliente_nao_encontrado", phone });
+    }
+
+    // 2. Busca todos os processos do cliente
+    const lawsuitsResult: any = await callAdvboxRest("GET", `lawsuits?customer_id=${customer.id}&limit=100`);
+    const lawsuits: any[] = lawsuitsResult?.data || [];
+
+    if (lawsuits.length === 0) {
+      return res.status(200).json({ status: "sem_processos", customer: customer.name });
+    }
+
+    // 3. Pega o processo mais antigo (menor process_date ou created_at)
+    const sorted = lawsuits.sort((a: any, b: any) => {
+      const da = new Date(a.process_date || a.created_at || "9999").getTime();
+      const db = new Date(b.process_date || b.created_at || "9999").getTime();
+      return da - db;
+    });
+    const processo = sorted[0];
+
+    // 4. Monta descrição do andamento
+    const hoje = new Date().toLocaleDateString("pt-BR");
+    let descricao = `Contato via WhatsApp em ${hoje}`;
+    if (mensagem) descricao += `: ${mensagem.substring(0, 300)}`;
+    if (responsavel) descricao += ` [Atendente: ${responsavel}]`;
+    if (linkChat) descricao += ` | Chat: ${linkChat}`;
+
+    // Garante mínimo de 10 caracteres
+    if (descricao.length < 10) descricao = `Contato via WhatsApp em ${hoje} — Nova conversa iniciada`;
+
+    // 5. Registra andamento no processo mais antigo
+    const movement = await callAdvboxRest("POST", "lawsuits/movement", {
+      lawsuit_id:  processo.id,
+      date:        hoje.split("/").join("/"), // já está em DD/MM/YYYY
+      description: descricao,
+    });
+
+    console.log(`[webhook] Andamento registrado | Cliente: ${customer.name} | Processo: ${processo.folder || processo.id} | ${descricao.substring(0, 80)}`);
+
+    return res.status(200).json({
+      status:    "ok",
+      customer:  customer.name,
+      processo:  processo.folder || processo.process_number || String(processo.id),
+      stage:     processo.stage,
+      andamento: descricao,
+      resultado: movement,
+    });
+
+  } catch (err: any) {
+    console.error("[webhook] Erro:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── 9. HEALTH ────────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "healthy", tools: TOOLS.length }));
 
