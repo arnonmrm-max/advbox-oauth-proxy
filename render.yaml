@@ -13,6 +13,10 @@ services:
       - key: PUBLIC_URL
         generateValue: false
         value: https://advbox-oauth-proxy.onrender.com
+      - key: ADVBOX_REST_URL
+        value: https://app.advbox.com.br/api/v1
+      - key: ADVBOX_REST_TOKEN
+        value: 4aganI4V9kABSyo6jHGlDbhyN9mcYwTbIQU8tu2oDsNyuoi6RLKplLZ3kIE3
       - key: CHATGURU_URL
         value: https://s17.chatguru.app/api/v1
       - key: CHATGURU_KEY

@@ -12,6 +12,10 @@ const ADVBOX_TOKEN = process.env.ADVBOX_TOKEN || "f869c4969f2e02f9245ee6a2d12db5
 const PORT         = parseInt(process.env.PORT || "4000");
 const PUBLIC_URL   = (process.env.PUBLIC_URL  || `http://localhost:${PORT}`).replace(/\/$/, "");
 
+// ─── ADVBOX REST API (app.advbox.com.br) ──────────────────────────────────────
+const ADVBOX_REST_URL   = process.env.ADVBOX_REST_URL   || "https://app.advbox.com.br/api/v1";
+const ADVBOX_REST_TOKEN = process.env.ADVBOX_REST_TOKEN || "4aganI4V9kABSyo6jHGlDbhyN9mcYwTbIQU8tu2oDsNyuoi6RLKplLZ3kIE3";
+
 // ─── CHATGURU CONFIG ──────────────────────────────────────────────────────────
 const CHATGURU_URL     = process.env.CHATGURU_URL     || "https://s17.chatguru.app/api/v1";
 const CHATGURU_KEY     = process.env.CHATGURU_KEY     || "BIN67XARJAKDZYJUCCG0852E7HH6GJREVBOQMHRQZMRIMQD00YJS1SVON5XXQD04";
@@ -123,7 +127,22 @@ async function callAdvbox(tool: string, args: Record<string, unknown>) {
   return r.json();
 }
 
-// ─── 6b. HELPER — envia WhatsApp via ChatGuru ─────────────────────────────────
+// ─── 6b. HELPER — chama a API REST oficial do Advbox ─────────────────────────
+async function callAdvboxRest(method: string, path: string, body?: Record<string, unknown>) {
+  const r = await fetch(`${ADVBOX_REST_URL}/${path}`, {
+    method,
+    headers: {
+      "Authorization": `Bearer ${ADVBOX_REST_TOKEN}`,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (r.status === 204) return { data: [] };
+  return r.json();
+}
+
+// ─── 6c. HELPER — envia WhatsApp via ChatGuru ─────────────────────────────────
 async function sendWhatsApp(phone: string, message: string, send_date?: string) {
   // Normaliza o número: remove tudo que não é dígito
   const chat_number = phone.replace(/\D/g, "");
@@ -229,11 +248,52 @@ const TOOLS = [
       notes:{type:"string", description:"Substitui todo o campo de notas — prefira add_andamento para preservar histórico"},
     }}},
 
+  { name: "create_movement",
+    description: "Adiciona um andamento processual MANUAL na timeline oficial de movimentações do processo no Advbox. Use para registrar qualquer movimentação: petição protocolada, decisão recebida, audiência realizada, despacho, sentença, etc. Este é o método correto para adicionar andamentos visíveis na aba Movimentações do processo.",
+    inputSchema: { type: "object", required: ["lawsuit_id","description"], properties: {
+      lawsuit_id:  { type: "number", description: "ID interno do processo no Advbox" },
+      description: { type: "string", description: "Descrição do andamento (mínimo 10 caracteres)" },
+      date:        { type: "string", description: "Data do andamento em DD/MM/YYYY. Se omitida usa hoje." },
+    }}},
+
+  { name: "list_movements",
+    description: "Lista todas as movimentações (andamentos processuais) de um processo, incluindo as do tribunal e as manuais.",
+    inputSchema: { type: "object", required: ["lawsuit_id"], properties: {
+      lawsuit_id: { type: "number" },
+      origin:     { type: "string", description: "TRIBUNAL ou MANUAL" },
+    }}},
+
+  { name: "list_history",
+    description: "Lista o histórico de tarefas realizadas em um processo.",
+    inputSchema: { type: "object", required: ["lawsuit_id"], properties: {
+      lawsuit_id: { type: "number" },
+      status:     { type: "string", description: "pending | completed | all" },
+    }}},
+
+  { name: "list_publications",
+    description: "Lista publicações do Diário de Justiça de um processo (intimações, sentenças, despachos capturados automaticamente).",
+    inputSchema: { type: "object", required: ["lawsuit_id"], properties: {
+      lawsuit_id: { type: "number" },
+    }}},
+
+  { name: "list_last_movements",
+    description: "Lista as últimas movimentações de todos os processos do escritório.",
+    inputSchema: { type: "object", properties: {
+      limit: { type: "number" }, offset: { type: "number" },
+    }}},
+
+  { name: "get_customer_birthdays",
+    description: "Lista clientes aniversariantes do mês. Útil para campanhas de relacionamento.",
+    inputSchema: { type: "object", properties: {
+      month: { type: "number", description: "Mês 1-12. Omitir = mês atual." },
+      limit: { type: "number" }, offset: { type: "number" },
+    }}},
+
   { name: "add_andamento",
-    description: "Registra um andamento processual no processo. Use sempre que houver movimentação, decisão, despacho, petição, audiência ou qualquer atualização. Acrescenta ao histórico com data automática sem apagar registros anteriores.",
+    description: "Registra um andamento nas notas gerais do processo. Para adicionar na timeline oficial de movimentações use create_movement.",
     inputSchema: { type: "object", required: ["lawsuit_id","descricao"], properties: {
-      lawsuit_id:{type:"number", description:"ID interno do processo no Advbox"},
-      descricao:{type:"string", description:"Descrição do andamento (ex: Sentença proferida, Audiência realizada, Petição protocolada)"},
+      lawsuit_id:{type:"number"},
+      descricao:{type:"string", description:"Descrição do andamento"},
     }}},
 
   // ── FINANCEIRO ────────────────────────────────────────────────────────────
@@ -364,6 +424,60 @@ app.post("/mcp", requireAuth, async (req, res) => {
           jsonrpc: "2.0", id,
           result: { content: [{ type: "text", text: JSON.stringify({ andamento_registrado: novaLinha, resultado }, null, 2) }] },
         });
+      }
+
+      // ── create_movement — andamento na timeline oficial via API REST ─────────
+      if (name === "create_movement") {
+        const { lawsuit_id, description, date } = args as Record<string, any>;
+        if (!lawsuit_id || !description) {
+          return res.json({ jsonrpc: "2.0", id, error: { code: -32602, message: "lawsuit_id e description são obrigatórios" } });
+        }
+        // Formata data como DD/MM/YYYY (exigido pela API)
+        const dateStr = date || new Date().toLocaleDateString("pt-BR");
+        const data = await callAdvboxRest("POST", "lawsuits/movement", {
+          lawsuit_id,
+          description,
+          date: dateStr,
+        });
+        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
+      }
+
+      // ── list_movements ────────────────────────────────────────────────────
+      if (name === "list_movements") {
+        const { lawsuit_id, origin } = args as Record<string, any>;
+        const qs = origin ? `?origin=${origin}` : "";
+        const data = await callAdvboxRest("GET", `movements/${lawsuit_id}${qs}`);
+        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
+      }
+
+      // ── list_history ──────────────────────────────────────────────────────
+      if (name === "list_history") {
+        const { lawsuit_id, status } = args as Record<string, any>;
+        const qs = status ? `?status=${status}` : "";
+        const data = await callAdvboxRest("GET", `history/${lawsuit_id}${qs}`);
+        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
+      }
+
+      // ── list_publications ─────────────────────────────────────────────────
+      if (name === "list_publications") {
+        const { lawsuit_id } = args as Record<string, any>;
+        const data = await callAdvboxRest("GET", `publications/${lawsuit_id}`);
+        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
+      }
+
+      // ── list_last_movements ───────────────────────────────────────────────
+      if (name === "list_last_movements") {
+        const { limit = 50, offset = 0 } = args as Record<string, any>;
+        const data = await callAdvboxRest("GET", `last_movements?limit=${limit}&offset=${offset}`);
+        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
+      }
+
+      // ── get_customer_birthdays ────────────────────────────────────────────
+      if (name === "get_customer_birthdays") {
+        const { month, limit = 100, offset = 0 } = args as Record<string, any>;
+        const qs = month ? `?month=${month}&limit=${limit}&offset=${offset}` : `?limit=${limit}&offset=${offset}`;
+        const data = await callAdvboxRest("GET", `customers/birthdays${qs}`);
+        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
       }
 
       // ── WhatsApp — tratado localmente, não vai para o Advbox ──────────────
