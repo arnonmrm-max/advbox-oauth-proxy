@@ -12,6 +12,12 @@ const ADVBOX_TOKEN = process.env.ADVBOX_TOKEN || "f869c4969f2e02f9245ee6a2d12db5
 const PORT         = parseInt(process.env.PORT || "4000");
 const PUBLIC_URL   = (process.env.PUBLIC_URL  || `http://localhost:${PORT}`).replace(/\/$/, "");
 
+// ─── CHATGURU CONFIG ──────────────────────────────────────────────────────────
+const CHATGURU_URL     = process.env.CHATGURU_URL     || "https://s17.chatguru.app/api/v1";
+const CHATGURU_KEY     = process.env.CHATGURU_KEY     || "BIN67XARJAKDZYJUCCG0852E7HH6GJREVBOQMHRQZMRIMQD00YJS1SVON5XXQD04";
+const CHATGURU_ACCOUNT = process.env.CHATGURU_ACCOUNT || "644a7348af2b76abbc1553dd";
+const CHATGURU_PHONE   = process.env.CHATGURU_PHONE   || "644a765d64007ea81fe9076f";
+
 const validTokens = new Set<string>();
 const authCodes   = new Map<string, string>();
 
@@ -117,6 +123,30 @@ async function callAdvbox(tool: string, args: Record<string, unknown>) {
   return r.json();
 }
 
+// ─── 6b. HELPER — envia WhatsApp via ChatGuru ─────────────────────────────────
+async function sendWhatsApp(phone: string, message: string, send_date?: string) {
+  // Normaliza o número: remove tudo que não é dígito
+  const chat_number = phone.replace(/\D/g, "");
+  if (!chat_number) throw new Error("Número de telefone inválido");
+
+  const params = new URLSearchParams({
+    action:     "message_send",
+    text:       message,
+    key:        CHATGURU_KEY,
+    account_id: CHATGURU_ACCOUNT,
+    phone_id:   CHATGURU_PHONE,
+    chat_number,
+  });
+  if (send_date) params.set("send_date", send_date);
+
+  const r = await fetch(CHATGURU_URL, {
+    method:  "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body:    params.toString(),
+  });
+  return r.json();
+}
+
 // ─── 7. MCP TOOLS LIST ────────────────────────────────────────────────────────
 const TOOLS = [
   { name: "list_customers",    description: "Lista clientes", inputSchema: { type: "object", properties: { name:{type:"string"}, phone:{type:"string"}, email:{type:"string"}, city:{type:"string"}, limit:{type:"number"}, offset:{type:"number"} } } },
@@ -138,6 +168,21 @@ const TOOLS = [
   { name: "get_stages",        description: "Lista estágios de processos", inputSchema: { type: "object", properties: {} } },
   { name: "get_type_lawsuits", description: "Lista tipos de processo", inputSchema: { type: "object", properties: {} } },
   { name: "get_users_rewards", description: "Pontuação da equipe", inputSchema: { type: "object", properties: { date:{type:"string"} } } },
+
+  // ── WhatsApp ──────────────────────────────────────────────────────────────
+  {
+    name: "send_whatsapp",
+    description: "Envia mensagem WhatsApp para um número via ChatGuru. Use para enviar andamentos, avisos e atualizações de processos aos clientes.",
+    inputSchema: {
+      type: "object",
+      required: ["phone", "message"],
+      properties: {
+        phone:     { type: "string",  description: "Número do destinatário com DDI+DDD (ex: 5527999999999)" },
+        message:   { type: "string",  description: "Texto da mensagem a enviar" },
+        send_date: { type: "string",  description: "Agendamento opcional no formato YYYY-MM-DD HH:MM" },
+      },
+    },
+  },
 ];
 
 // ─── 8. MCP STREAMABLE HTTP ENDPOINT ─────────────────────────────────────────
@@ -177,6 +222,21 @@ app.post("/mcp", requireAuth, async (req, res) => {
     // tools/call
     if (body.method === "tools/call") {
       const { name, arguments: args = {} } = body.params || {};
+
+      // ── WhatsApp — tratado localmente, não vai para o Advbox ──────────────
+      if (name === "send_whatsapp") {
+        const { phone, message, send_date } = args as Record<string, string>;
+        if (!phone || !message) {
+          return res.json({ jsonrpc: "2.0", id, error: { code: -32602, message: "phone e message são obrigatórios" } });
+        }
+        const data = await sendWhatsApp(phone, message, send_date);
+        return res.json({
+          jsonrpc: "2.0", id,
+          result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] },
+        });
+      }
+
+      // ── Demais ferramentas → Advbox ───────────────────────────────────────
       const data = await callAdvbox(name, args);
       return res.json({
         jsonrpc: "2.0", id,

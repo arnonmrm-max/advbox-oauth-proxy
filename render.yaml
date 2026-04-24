@@ -13,3 +13,11 @@ services:
       - key: PUBLIC_URL
         generateValue: false
         value: https://advbox-oauth-proxy.onrender.com
+      - key: CHATGURU_URL
+        value: https://s17.chatguru.app/api/v1
+      - key: CHATGURU_KEY
+        value: BIN67XARJAKDZYJUCCG0852E7HH6GJREVBOQMHRQZMRIMQD00YJS1SVON5XXQD04
+      - key: CHATGURU_ACCOUNT
+        value: 644a7348af2b76abbc1553dd
+      - key: CHATGURU_PHONE
+        value: 644a765d64007ea81fe9076f
