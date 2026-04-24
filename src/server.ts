@@ -157,7 +157,8 @@ const TOOLS = [
   { name: "get_lawsuit",       description: "Detalhes de um processo", inputSchema: { type: "object", required: ["lawsuit_id"], properties: { lawsuit_id:{type:"number"} } } },
   { name: "search_lawsuits",   description: "Busca processo por nome", inputSchema: { type: "object", properties: { query:{type:"string"}, name:{type:"string"} } } },
   { name: "create_lawsuit",    description: "Cria processo", inputSchema: { type: "object", required: ["users_id","customers_id","stages_id","type_lawsuits_id"], properties: { users_id:{type:"number"}, customers_id:{type:"array",items:{type:"number"}}, stages_id:{type:"number"}, type_lawsuits_id:{type:"number"}, folder:{type:"string"}, process_number:{type:"string"} } } },
-  { name: "update_lawsuit",    description: "Atualiza processo", inputSchema: { type: "object", required: ["lawsuit_id"], properties: { lawsuit_id:{type:"number"}, stages_id:{type:"number"}, notes:{type:"string"} } } },
+  { name: "update_lawsuit",    description: "Atualiza fase (stages_id) ou dados gerais de um processo. Para registrar andamentos processuais use add_andamento.", inputSchema: { type: "object", required: ["lawsuit_id"], properties: { lawsuit_id:{type:"number"}, stages_id:{type:"number"}, notes:{type:"string", description:"Campo de notas gerais do processo"} } } },
+  { name: "add_andamento",     description: "Registra um andamento processual no processo. Use sempre que houver uma movimentação, decisão, despacho, petição, audiência ou qualquer atualização no processo. Acrescenta o andamento ao histórico existente com data automática.", inputSchema: { type: "object", required: ["lawsuit_id","descricao"], properties: { lawsuit_id:{type:"number", description:"ID interno do processo no Advbox"}, descricao:{type:"string", description:"Descrição do andamento processual (ex: Sentença proferida, Audiência realizada, Petição protocolada)"} } } },
   { name: "list_transactions", description: "Lista transações financeiras", inputSchema: { type: "object", properties: { date_payment_start:{type:"string"}, date_payment_end:{type:"string"}, lawsuit_id:{type:"number"}, limit:{type:"number"} } } },
   { name: "get_transaction",   description: "Detalhes de uma transação", inputSchema: { type: "object", required: ["transaction_id"], properties: { transaction_id:{type:"number"} } } },
   { name: "list_tasks",        description: "Lista tarefas e compromissos", inputSchema: { type: "object", properties: { date_start:{type:"string"}, date_end:{type:"string"}, user_id:{type:"number"}, lawsuit_id:{type:"number"} } } },
@@ -222,6 +223,34 @@ app.post("/mcp", requireAuth, async (req, res) => {
     // tools/call
     if (body.method === "tools/call") {
       const { name, arguments: args = {} } = body.params || {};
+
+      // ── add_andamento — lê notes atual, acrescenta e salva ───────────────
+      if (name === "add_andamento") {
+        const { lawsuit_id, descricao } = args as Record<string, any>;
+        if (!lawsuit_id || !descricao) {
+          return res.json({ jsonrpc: "2.0", id, error: { code: -32602, message: "lawsuit_id e descricao são obrigatórios" } });
+        }
+
+        // 1. Lê o processo para pegar notes atual
+        const lawsuit: any = await callAdvbox("get_lawsuit", { lawsuit_id });
+        const notesAtual: string = lawsuit.notes || "";
+
+        // 2. Formata a nova linha de andamento com data de hoje
+        const hoje = new Date().toLocaleDateString("pt-BR");
+        const novaLinha = `Andamento: Data: ${hoje} - Descrição: ${descricao}`;
+
+        // 3. Acrescenta ao histórico existente
+        const notesNovo = notesAtual
+          ? `${notesAtual}\n${novaLinha}`
+          : novaLinha;
+
+        // 4. Salva no processo
+        const resultado: any = await callAdvbox("update_lawsuit", { lawsuit_id, notes: notesNovo });
+        return res.json({
+          jsonrpc: "2.0", id,
+          result: { content: [{ type: "text", text: JSON.stringify({ andamento_registrado: novaLinha, resultado }, null, 2) }] },
+        });
+      }
 
       // ── WhatsApp — tratado localmente, não vai para o Advbox ──────────────
       if (name === "send_whatsapp") {
