@@ -9,5 +9,6 @@ services:
     environment:
       - PORT=4000
       - CHATGURU_SERVER=17
+      - GEMINI_API_KEY=AIzaSyDO4tSC1-TkVol4ASrofV1oe0KlWh-fpuo
       - NODE_ENV=production
       # As senhas e tokens reais você pode definir aqui ou no arquivo .env no servidor

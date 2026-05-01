@@ -30,7 +30,7 @@ RESUMO PARA O ADVBOX:`;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash", // Utilizando a versão rápida e barata recomendada
+      model: "gemini-2.5-pro", // Modelo mais inteligente para análise jurídica complexa
       contents: prompt,
     });
     
