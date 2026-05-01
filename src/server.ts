@@ -1,6 +1,8 @@
 import express from "express";
 import crypto from "crypto";
 import fetch from "node-fetch";
+import { scrapeChatHistory } from "./scraper";
+import { generateSummary } from "./ai";
 
 const app = express();
 app.use(express.json());
@@ -613,7 +615,81 @@ app.post("/webhook/chatguru", async (req, res) => {
   }
 });
 
-// ─── 9. HEALTH ────────────────────────────────────────────────────────────────
+// ─── 10. WEBHOOK RESUMO IA (ChatGuru + Gemini + Advbox) ─────────────────────────
+app.post("/webhook/chatguru-summary", async (req, res) => {
+  try {
+    const body = req.body;
+    const phone: string = (body.celular || body.phone || body.chat_number || "").replace(/\D/g, "");
+    const chatUrl: string = body.link_chat || "";
+    
+    // Extrai o hash do chat a partir da URL (ex: https://s17.expertintegrado.app/chats#699ce2eab27ac598c766e752)
+    const match = chatUrl.match(/#([a-f0-9]{24})/);
+    const chatId = match ? match[1] : null;
+
+    if (!phone) return res.status(400).json({ error: "Telefone não encontrado no payload" });
+    if (!chatId) return res.status(400).json({ error: "Link do chat não contém o hash/id do chat. Envie o link_chat no payload." });
+
+    console.log(`\n[Webhook Resumo IA] Iniciando processo para o telefone: ${phone} (Chat: ${chatId})`);
+
+    // 1. Extrai o histórico do ChatGuru via Playwright
+    console.log(`[Scraper] Extraindo histórico...`);
+    const history = await scrapeChatHistory(chatId);
+
+    // 2. Passa para o Gemini resumir
+    console.log(`[IA] Gerando resumo com Gemini...`);
+    const summary = await generateSummary(history);
+    console.log(`[IA] Resumo: ${summary}`);
+
+    // 3. Busca cliente no Advbox
+    let customer: any = null;
+    const phoneVariants = [phone, phone.replace(/^55/, ""), `55${phone}`];
+    for (const p of phoneVariants) {
+      const result: any = await callAdvboxRest("GET", `customers?phone=${p}&limit=5`);
+      if (result?.data?.length > 0) {
+        customer = result.data[0];
+        break;
+      }
+    }
+
+    if (!customer) {
+      console.log(`[Advbox] Cliente não encontrado. Resumo gerado, mas não salvo: ${summary}`);
+      return res.status(200).json({ status: "cliente_nao_encontrado", summary });
+    }
+
+    // 4. Pega o processo mais antigo do cliente
+    const lawsuitsResult: any = await callAdvboxRest("GET", `lawsuits?customer_id=${customer.id}&limit=100`);
+    const lawsuits: any[] = lawsuitsResult?.data || [];
+    if (lawsuits.length === 0) {
+      return res.status(200).json({ status: "sem_processos", summary });
+    }
+
+    const sorted = lawsuits.sort((a: any, b: any) => {
+      const da = new Date(a.process_date || a.created_at || "9999").getTime();
+      const db = new Date(b.process_date || b.created_at || "9999").getTime();
+      return da - db;
+    });
+    const processo = sorted[0];
+
+    // 5. Salva na Advbox
+    const hoje = new Date().toLocaleDateString("pt-BR");
+    const descricao = `Resumo IA (ChatGuru - ${hoje}):\n${summary}\n\nLink Chat: ${chatUrl}`;
+    
+    await callAdvboxRest("POST", "lawsuits/movement", {
+      lawsuit_id: processo.id,
+      date: hoje.split("/").join("/"),
+      description: descricao,
+    });
+
+    console.log(`[Sucesso] Resumo salvo no processo ${processo.folder || processo.id} do cliente ${customer.name}`);
+
+    return res.status(200).json({ status: "ok", customer: customer.name, andamento: descricao });
+  } catch (err: any) {
+    console.error("[Webhook Resumo IA] Erro:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── 11. HEALTH ────────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "healthy", tools: TOOLS.length }));
 
 // ─── START ────────────────────────────────────────────────────────────────────

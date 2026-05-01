@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  advbox-proxy:
+    build: .
+    container_name: advbox-oauth-proxy
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - CHATGURU_SERVER=17
+      - NODE_ENV=production
+      # As senhas e tokens reais você pode definir aqui ou no arquivo .env no servidor
