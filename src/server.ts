@@ -10,19 +10,19 @@ app.use(express.urlencoded({ extended: true }));
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const ADVBOX_URL   = process.env.ADVBOX_URL   || "https://mcp.limaamorim.com.br";
-const ADVBOX_TOKEN = process.env.ADVBOX_TOKEN || "f869c4969f2e02f9245ee6a2d12db5788d92784da6badc9bba4d1d29a2bcc03c";
+const ADVBOX_TOKEN = process.env.ADVBOX_TOKEN || "";
 const PORT         = parseInt(process.env.PORT || "4000");
 const PUBLIC_URL   = (process.env.PUBLIC_URL  || `http://localhost:${PORT}`).replace(/\/$/, "");
 
 // ─── ADVBOX REST API (app.advbox.com.br) ──────────────────────────────────────
 const ADVBOX_REST_URL   = process.env.ADVBOX_REST_URL   || "https://app.advbox.com.br/api/v1";
-const ADVBOX_REST_TOKEN = process.env.ADVBOX_REST_TOKEN || "4aganI4V9kABSyo6jHGlDbhyN9mcYwTbIQU8tu2oDsNyuoi6RLKplLZ3kIE3";
+const ADVBOX_REST_TOKEN = process.env.ADVBOX_REST_TOKEN || "";
 
 // ─── CHATGURU CONFIG ──────────────────────────────────────────────────────────
 const CHATGURU_URL     = process.env.CHATGURU_URL     || "https://s17.chatguru.app/api/v1";
-const CHATGURU_KEY     = process.env.CHATGURU_KEY     || "BIN67XARJAKDZYJUCCG0852E7HH6GJREVBOQMHRQZMRIMQD00YJS1SVON5XXQD04";
-const CHATGURU_ACCOUNT = process.env.CHATGURU_ACCOUNT || "644a7348af2b76abbc1553dd";
-const CHATGURU_PHONE   = process.env.CHATGURU_PHONE   || "644a765d64007ea81fe9076f";
+const CHATGURU_KEY     = process.env.CHATGURU_KEY     || "";
+const CHATGURU_ACCOUNT = process.env.CHATGURU_ACCOUNT || "";
+const CHATGURU_PHONE   = process.env.CHATGURU_PHONE   || "";
 
 const validTokens = new Set<string>();
 const authCodes   = new Map<string, string>();
