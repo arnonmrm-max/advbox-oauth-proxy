@@ -13,17 +13,17 @@ app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const ADVBOX_URL = process.env.ADVBOX_URL || "https://mcp.limaamorim.com.br";
-const ADVBOX_TOKEN = process.env.ADVBOX_TOKEN || "f869c4969f2e02f9245ee6a2d12db5788d92784da6badc9bba4d1d29a2bcc03c";
+const ADVBOX_TOKEN = process.env.ADVBOX_TOKEN || "";
 const PORT = parseInt(process.env.PORT || "4000");
 const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, "");
 // ─── ADVBOX REST API (app.advbox.com.br) ──────────────────────────────────────
 const ADVBOX_REST_URL = process.env.ADVBOX_REST_URL || "https://app.advbox.com.br/api/v1";
-const ADVBOX_REST_TOKEN = process.env.ADVBOX_REST_TOKEN || "4aganI4V9kABSyo6jHGlDbhyN9mcYwTbIQU8tu2oDsNyuoi6RLKplLZ3kIE3";
+const ADVBOX_REST_TOKEN = process.env.ADVBOX_REST_TOKEN || "";
 // ─── CHATGURU CONFIG ──────────────────────────────────────────────────────────
 const CHATGURU_URL = process.env.CHATGURU_URL || "https://s17.chatguru.app/api/v1";
-const CHATGURU_KEY = process.env.CHATGURU_KEY || "BIN67XARJAKDZYJUCCG0852E7HH6GJREVBOQMHRQZMRIMQD00YJS1SVON5XXQD04";
-const CHATGURU_ACCOUNT = process.env.CHATGURU_ACCOUNT || "644a7348af2b76abbc1553dd";
-const CHATGURU_PHONE = process.env.CHATGURU_PHONE || "644a765d64007ea81fe9076f";
+const CHATGURU_KEY = process.env.CHATGURU_KEY || "";
+const CHATGURU_ACCOUNT = process.env.CHATGURU_ACCOUNT || "";
+const CHATGURU_PHONE = process.env.CHATGURU_PHONE || "";
 const validTokens = new Set();
 const authCodes = new Map();
 // ─── CORS ─────────────────────────────────────────────────────────────────────
@@ -286,6 +286,35 @@ const TOOLS = [
         inputSchema: { type: "object", required: ["transaction_id"], properties: {
                 transaction_id: { type: "number" },
             } } },
+    { name: "create_transaction",
+        description: "Cria uma transação financeira (receita ou despesa) no Advbox. ATENÇÃO: o entry_type deve casar com o tipo da categoria — income exige categoria CRÉDITO, expense exige categoria DÉBITO. Use get_settings para obter os IDs de banks, categories e cost_centers.",
+        inputSchema: { type: "object", required: ["users_id", "entry_type", "debit_account", "categories_id", "cost_centers_id", "amount", "date_due"], properties: {
+                users_id: { type: "number", description: "ID do usuário responsável (get_users)" },
+                entry_type: { type: "string", enum: ["income", "expense"], description: "income = receita (CRÉDITO) | expense = despesa (DÉBITO)" },
+                debit_account: { type: "number", description: "ID da conta bancária (get_settings.financial.banks)" },
+                categories_id: { type: "number", description: "ID da categoria financeira (get_settings.financial.categories) — tipo deve casar com entry_type" },
+                cost_centers_id: { type: "number", description: "ID do centro de custo (get_settings.financial.cost_centers)" },
+                amount: { type: "number", description: "Valor em reais (ex: 1500.00). Maior que zero." },
+                date_due: { type: "string", description: "Data de vencimento (YYYY-MM-DD)" },
+                customers_id: { type: "number", description: "ID do cliente vinculado (opcional)" },
+                lawsuits_id: { type: "number", description: "ID do processo vinculado (opcional — REQUER customers_id junto)" },
+                sectors_id: { type: "number", description: "ID do setor/departamento (opcional)" },
+                description: { type: "string", description: "Descrição da transação (será convertida para MAIÚSCULAS)" },
+                date_payment: { type: "string", description: "Data de pagamento se já paga (YYYY-MM-DD, não pode ser futura)" },
+                competence: { type: "string", description: "Competência MM/YYYY (ex: 03/2026)" },
+            } } },
+    { name: "update_transaction",
+        description: "Atualiza uma transação financeira existente. Use para marcar como paga (date_payment), corrigir valor, mudar vencimento ou alterar tipo. ATENÇÃO: ao alterar categories_id é OBRIGATÓRIO enviar entry_type junto. Para marcar como em aberto, envie date_payment: null.",
+        inputSchema: { type: "object", required: ["transaction_id"], properties: {
+                transaction_id: { type: "number", description: "ID da transação a atualizar" },
+                entry_type: { type: "string", enum: ["income", "expense"], description: "income | expense — OBRIGATÓRIO se alterar categories_id" },
+                categories_id: { type: "number", description: "Nova categoria (exige entry_type junto)" },
+                amount: { type: "number", description: "Novo valor em reais" },
+                date_due: { type: "string", description: "Nova data de vencimento (YYYY-MM-DD)" },
+                date_payment: { type: ["string", "null"], description: "Data de pagamento (YYYY-MM-DD) ou null para marcar como em aberto" },
+                description: { type: "string", description: "Nova descrição" },
+                competence: { type: "string", description: "Nova competência (MM/YYYY)" },
+            } } },
     // ── TAREFAS ───────────────────────────────────────────────────────────────
     { name: "list_tasks",
         description: "Lista tarefas e compromissos. Filtre por período, usuário, processo ou tipo de tarefa.",
@@ -430,6 +459,54 @@ app.post("/mcp", requireAuth, async (req, res) => {
                 const { month, limit = 100, offset = 0 } = args;
                 const qs = month ? `?month=${month}&limit=${limit}&offset=${offset}` : `?limit=${limit}&offset=${offset}`;
                 const data = await callAdvboxRest("GET", `customers/birthdays${qs}`);
+                return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
+            }
+            // ── create_transaction — receita/despesa via REST oficial ────────────
+            if (name === "create_transaction") {
+                const a = args;
+                const required = ["users_id", "entry_type", "debit_account", "categories_id", "cost_centers_id", "amount", "date_due"];
+                const missing = required.filter(k => a[k] === undefined || a[k] === null || a[k] === "");
+                if (missing.length) {
+                    return res.json({ jsonrpc: "2.0", id, error: { code: -32602, message: `Campos obrigatórios ausentes: ${missing.join(", ")}` } });
+                }
+                if (a.lawsuits_id && !a.customers_id) {
+                    return res.json({ jsonrpc: "2.0", id, error: { code: -32602, message: "lawsuits_id requer customers_id junto" } });
+                }
+                const payload = {
+                    users_id: a.users_id,
+                    entry_type: a.entry_type,
+                    debit_account: a.debit_account,
+                    categories_id: a.categories_id,
+                    cost_centers_id: a.cost_centers_id,
+                    amount: a.amount,
+                    date_due: a.date_due,
+                };
+                for (const k of ["customers_id", "lawsuits_id", "sectors_id", "description", "date_payment", "competence"]) {
+                    if (a[k] !== undefined)
+                        payload[k] = a[k];
+                }
+                const data = await callAdvboxRest("POST", "transactions", payload);
+                return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
+            }
+            // ── update_transaction — atualização via REST oficial ────────────────
+            if (name === "update_transaction") {
+                const a = args;
+                const { transaction_id } = a;
+                if (!transaction_id) {
+                    return res.json({ jsonrpc: "2.0", id, error: { code: -32602, message: "transaction_id é obrigatório" } });
+                }
+                if (a.categories_id !== undefined && a.entry_type === undefined) {
+                    return res.json({ jsonrpc: "2.0", id, error: { code: -32602, message: "Ao alterar categories_id é obrigatório enviar entry_type junto" } });
+                }
+                const payload = {};
+                for (const k of ["entry_type", "categories_id", "amount", "date_due", "date_payment", "description", "competence"]) {
+                    if (a[k] !== undefined)
+                        payload[k] = a[k];
+                }
+                if (Object.keys(payload).length === 0) {
+                    return res.json({ jsonrpc: "2.0", id, error: { code: -32602, message: "Informe ao menos um campo para atualizar" } });
+                }
+                const data = await callAdvboxRest("PUT", `transactions/${transaction_id}`, payload);
                 return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] } });
             }
             // ── WhatsApp — tratado localmente, não vai para o Advbox ──────────────
